@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8">
@@ -7,9 +6,84 @@
     <script src="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.js"></script>
   </head>
   <body class="mixpanel-platform-body">
-    <h1>Hello, World!</h1>
-    <script>
-      // Run queries and display results here
-    </script>
+  <script id='query'>
+    function main() {
+      var sevenDays = 60 * 60 * 24 * 7 * 1000
+      var fromDate = new Date(new Date() - sevenDays)
+      var toDate = new Date()
+      
+      function formatDate(date) {
+        return date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate()
+      }
+      
+      return Events({
+        from_date: formatDate(fromDate),
+        to_date: formatDate(toDate),
+        // from_date: "2016-04-11",
+        // to_date: "2016-04-17",
+        event_selectors: [{ event: "Authorized" }]
+      })
+      .filter(function(event) {
+        // filter out Clef and Waltz
+        return event.properties.web_app_id != "d81426867b9c6af247410d317c534880" 
+            && event.properties.web_app_id != "b713c50b757533e3a6f1aff4700fbf5f"
+      })
+      .groupBy(["properties.web_app_id", "properties.user_id"], mixpanel.reducer.count())
+      .reduce(function(previous_counts, items) {
+        var logins_per_site = {}
+        
+        _.each(items, function(item) {
+          var application_id = item.key[0]
+          if (logins_per_site[application_id]) {
+            logins_per_site[application_id] += 1
+          } else {
+            logins_per_site[application_id] = 1
+          }
+        })
+        
+        _.each(previous_counts, function(count) {
+          _.each(count, function(value, key) {
+            if (logins_per_site[key]) {
+              logins_per_site[key] += value
+            } else {
+              logins_per_site[key] = value
+            }
+          })
+        })
+        
+        return logins_per_site
+      }).map(function(items) {
+        var sitesWithNumberOfActiveUsers = {}
+        _.each(items, function(v, k) {
+          if (sitesWithNumberOfActiveUsers[v]) {
+            sitesWithNumberOfActiveUsers[v] += 1
+          } else {
+            sitesWithNumberOfActiveUsers[v] = 1
+          }
+        })
+        return sitesWithNumberOfActiveUsers
+      })
+    }
+  </script>
+  <div id="table" style='width:943px'></div><br>
+  <script>
+  var script = document.getElementById('query').innerHTML;
+  var dateSelect = $('#dateSelect').MPDatepicker();
+  var eventSelect = $('#events').MPEventSelect();
+  var propSelect = $('#properties').MPPropertySelect();
+  propSelect.MPPropertySelect('setEvent');
+  var eventTable = $('#table').MPTable({showPercentages: false, firstColHeader: 'Frequency'});
+  function runQuery() {
+    var params = {};
+    MP.api.custom_query(script, params).done(function(results) {
+      var res = {}; var i = 1;
+      _.each(results[0], function(item) {
+        res[i] = item; i++;
+      })
+      eventTable.MPTable('setData', res);
+    });
+  }
+  runQuery();
+  </script>
   </body>
 </html>
